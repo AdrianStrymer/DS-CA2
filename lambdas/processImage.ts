@@ -1,5 +1,6 @@
 /* eslint-disable import/extensions, import/no-absolute-path */
 import { SQSHandler } from "aws-lambda";
+import { PutItemCommand, PutItemCommandInput } from "@aws-sdk/client-dynamodb";
 import {
   GetObjectCommand,
   PutObjectCommandInput,
@@ -7,8 +8,12 @@ import {
   S3Client,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
+import { extname } from "path";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 
 const s3 = new S3Client();
+const dynamodb = new DynamoDBClient();
+const imagesTableName = process.env.IMAGES_TABLE_NAME;
 
 export const handler: SQSHandler = async (event) => {
   console.log("Event ", JSON.stringify(event));
@@ -23,17 +28,29 @@ export const handler: SQSHandler = async (event) => {
         const srcBucket = s3e.bucket.name;
         // Object key may have spaces or unicode non-ASCII characters.
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
-        let origimage = null;
+        const fileExtension = extname(srcKey).toLowerCase();
+        if (fileExtension !== ".jpeg" && fileExtension !== ".png") {
+          console.log(`File ${srcKey} is not a JPEG or PNG.`);
+          continue;
+        }
+
         try {
-          // Download the image from the S3 source bucket.
           const params: GetObjectCommandInput = {
             Bucket: srcBucket,
             Key: srcKey,
           };
-          origimage = await s3.send(new GetObjectCommand(params));
-          // Process the image ......
+          await s3.send(new GetObjectCommand(params));
+
+          const putParams: PutItemCommandInput = {
+            TableName: imagesTableName,
+            Item: {
+              imageName: { S: srcKey },
+            },
+          };
+          await dynamodb.send(new PutItemCommand(putParams));
+          console.log(`File ${srcKey} metadata saved to DynamoDB.`);
         } catch (error) {
-          console.log(error);
+          console.error(`Error processing file ${srcKey}:`, error);
         }
       }
     }

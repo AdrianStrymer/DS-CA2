@@ -8,6 +8,8 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { Duration } from "aws-cdk-lib";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 import { Construct } from "constructs";
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -20,6 +22,13 @@ export class EDAAppStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       publicReadAccess: false,
+    });
+
+    const imagesTable = new dynamodb.Table(this, "ImagesTable", {
+      partitionKey: { name: "imageName", type: dynamodb.AttributeType.STRING }, 
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, 
+      removalPolicy: cdk.RemovalPolicy.DESTROY,  
+      tableName: "Images"        
     });
 
 
@@ -47,6 +56,10 @@ export class EDAAppStack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/processImage.ts`,
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
+      environment: {
+        REGION: "eu-west-1",
+        IMAGES_TABLE_NAME: imagesTable.tableName,
+      }
     }
   );
 
@@ -63,8 +76,8 @@ export class EDAAppStack extends cdk.Stack {
     new s3n.SnsDestination(newImageTopic)  // Changed
 );
 
-newImageTopic.addSubscription(
-  new subs.SqsSubscription(imageProcessQueue)
+  newImageTopic.addSubscription(
+    new subs.SqsSubscription(imageProcessQueue)
 );
 
  // SQS --> Lambda
@@ -82,6 +95,12 @@ newImageTopic.addSubscription(
   mailerFn.addEventSource(newImageMailEventSource);
   newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
 
+
+  // Permissions
+
+  imagesBucket.grantRead(processImageFn);
+  imagesTable.grantWriteData(processImageFn);
+
   mailerFn.addToRolePolicy(
     new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -93,11 +112,6 @@ newImageTopic.addSubscription(
       resources: ["*"],
     })
   );
-
-
-  // Permissions
-
-  imagesBucket.grantRead(processImageFn);
 
   // Output
   

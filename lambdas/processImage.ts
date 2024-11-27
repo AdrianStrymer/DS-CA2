@@ -30,9 +30,18 @@ export const handler: SQSHandler = async (event) => {
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
         const fileExtension = extname(srcKey).toLowerCase();
         if (fileExtension !== ".jpeg" && fileExtension !== ".png") {
-          console.log(`File ${srcKey} is not a JPEG or PNG.`);
-          continue;
+          const errorMsg= `File ${srcKey} is not a JPEG or PNG.`;
+          console.log(errorMsg);
+
+      
+          throw new Error(
+            JSON.stringify({
+              errorMessage: errorMsg,
+              fileName: srcKey,
+            })
+          );
         }
+      
 
         try {
           const params: GetObjectCommandInput = {

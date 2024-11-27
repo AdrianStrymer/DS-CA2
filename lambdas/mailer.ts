@@ -90,14 +90,3 @@ function getHtmlContent({ name, email, message }: ContactDetails) {
     </html> 
   `;
 }
-
- // For demo purposes - not used here.
-function getTextContent({ name, email, message }: ContactDetails) {
-  return `
-    Received an Email. 📬
-    Sent from:
-        👤 ${name}
-        ✉️ ${email}
-    ${message}
-  `;
-}

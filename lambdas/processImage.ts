@@ -26,7 +26,6 @@ export const handler: SQSHandler = async (event) => {
       for (const messageRecord of snsMessage.Records) {
         const s3e = messageRecord.s3;
         const srcBucket = s3e.bucket.name;
-        // Object key may have spaces or unicode non-ASCII characters.
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
         const fileExtension = extname(srcKey).toLowerCase();
         if (fileExtension !== ".jpeg" && fileExtension !== ".png") {

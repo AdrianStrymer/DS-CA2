@@ -28,7 +28,15 @@ export class EDAAppStack extends cdk.Stack {
       partitionKey: { name: "imageName", type: dynamodb.AttributeType.STRING }, 
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, 
       removalPolicy: cdk.RemovalPolicy.DESTROY,  
-      tableName: "Images"        
+      tableName: "Images",
+      stream: dynamodb.StreamViewType.NEW_IMAGE      
+    });
+
+    const streamSource = new events.DynamoEventSource(imagesTable, {
+      startingPosition: lambda.StartingPosition.LATEST,
+      batchSize: 5,
+      bisectBatchOnError: true,
+      retryAttempts: 2,
     });
 
 
@@ -101,6 +109,11 @@ export class EDAAppStack extends cdk.Stack {
     new s3n.SnsDestination(newImageTopic)  
 );
 
+imagesBucket.addEventNotification(
+  s3.EventType.OBJECT_REMOVED, 
+  new s3n.SnsDestination(newImageTopic)
+);
+
 newImageTopic.addSubscription(
   new subs.SqsSubscription(imageProcessQueue)
 );
@@ -127,10 +140,10 @@ newImageTopic.addSubscription(
     maxBatchingWindow: cdk.Duration.seconds(5),
   });
 
-  const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
-    batchSize: 5,
-    maxBatchingWindow: cdk.Duration.seconds(5),
-  });
+  // const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
+  //   batchSize: 5,
+  //   maxBatchingWindow: cdk.Duration.seconds(5),
+  // });
 
   const rejectionMailEventSource = new events.SqsEventSource(deadLetterQueue, {
     batchSize: 5,
@@ -139,7 +152,8 @@ newImageTopic.addSubscription(
 
   rejectionMailerFn.addEventSource(rejectionMailEventSource);
   processImageFn.addEventSource(newImageEventSource);
-  mailerFn.addEventSource(newImageMailEventSource);
+  //mailerFn.addEventSource(newImageMailEventSource);
+  mailerFn.addEventSource(streamSource);
 
   // Permissions
 

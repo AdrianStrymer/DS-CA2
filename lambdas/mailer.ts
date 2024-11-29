@@ -1,10 +1,10 @@
-import { SQSHandler } from "aws-lambda";
 import { SES_EMAIL_FROM, SES_EMAIL_TO, SES_REGION } from "../env";
 import {
   SESClient,
   SendEmailCommand,
   SendEmailCommandInput,
 } from "@aws-sdk/client-ses";
+import { DynamoDBStreamHandler } from "aws-lambda";
 
 if (!SES_EMAIL_TO || !SES_EMAIL_FROM || !SES_REGION) {
   throw new Error(
@@ -20,35 +20,26 @@ type ContactDetails = {
 
 const client = new SESClient({ region: SES_REGION});
 
-export const handler: SQSHandler = async (event: any) => {
+export const handler: DynamoDBStreamHandler = async (event) => {
   console.log("Event ", JSON.stringify(event));
   for (const record of event.Records) {
-    const recordBody = JSON.parse(record.body);
-    const snsMessage = JSON.parse(recordBody.Message);
-
-    if (snsMessage.Records) {
-      console.log("Record body ", JSON.stringify(snsMessage));
-      for (const messageRecord of snsMessage.Records) {
-        const s3e = messageRecord.s3;
-        const srcBucket = s3e.bucket.name;
-        // Object key may have spaces or unicode non-ASCII characters.
-        const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
+    if (record.eventName === "INSERT") {
         try {
           const { name, email, message }: ContactDetails = {
             name: "The Photo Album",
             email: SES_EMAIL_FROM,
-            message: `We received your Image. Its URL is s3://${srcBucket}/${srcKey}`,
+            message: "A new image  was added to the photo album.",
           };
           const params = sendEmailParams({ name, email, message });
           await client.send(new SendEmailCommand(params));
-        } catch (error: unknown) {
+          console.log("Notification email sent for image:")
+        } catch (error) {
           console.log("ERROR is: ", error);
-          // return;
         }
+      
       }
     }
   }
-};
 
 function sendEmailParams({ name, email, message }: ContactDetails) {
   const parameters: SendEmailCommandInput = {
@@ -61,10 +52,6 @@ function sendEmailParams({ name, email, message }: ContactDetails) {
           Charset: "UTF-8",
           Data: getHtmlContent({ name, email, message }),
         },
-        // Text: {.           // For demo purposes
-        //   Charset: "UTF-8",
-        //   Data: getTextContent({ name, email, message }),
-        // },
       },
       Subject: {
         Charset: "UTF-8",
